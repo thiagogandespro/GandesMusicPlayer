@@ -11,11 +11,11 @@ object Destinations{
 
 class AppNavigationActions(private val navController: NavController) {
     fun navigateToPlayListScreen(){
-        navController.navigate(PLAY_BACK_SCREEN)
+        navController.navigate(PLAY_LIST_SCREEN)
     }
 
     fun navigateToPlayBackScreen(){
-        navController.navigate(PLAY_LIST_SCREEN)
+        navController.navigate(PLAY_BACK_SCREEN)
     }
 
 }

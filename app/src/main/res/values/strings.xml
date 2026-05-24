@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">GandesMusicPlayer</string>
+    <string name="playback_service_description">Service for media playback.</string>
 </resources>
