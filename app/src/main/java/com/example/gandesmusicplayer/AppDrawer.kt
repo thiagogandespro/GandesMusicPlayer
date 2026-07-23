@@ -31,6 +31,7 @@ fun AppModalDrawer(
     modifier: Modifier = Modifier,
     openDrawer: () -> Unit,
     closeDrawer: () -> Unit,
+    currentRoute: String,
     appContent: @Composable (modifier: Modifier) -> Unit,
 ){
     ModalNavigationDrawer(
@@ -45,6 +46,7 @@ fun AppModalDrawer(
                     closeDrawer()
                     navigationActions.navigateToPlayListScreen()
                } ,
+                currentRoute = currentRoute,
             )
         }
     ){
@@ -62,7 +64,7 @@ fun AppModalDrawer(
                 )
             }
         ) { paddingValues ->
-            appContent(modifier.padding(paddingValues))
+            appContent(Modifier.padding(paddingValues).fillMaxSize())
         }
     }
 }
@@ -72,13 +74,14 @@ private fun AppDrawerContent(
     modifier: Modifier = Modifier,
     navigateToPlayBlackScreen: () -> Unit = {},
     navigateToPlayListScreen: () -> Unit = {},
+    currentRoute: String,
 ){
     Surface() {
         Column(
             modifier = modifier.fillMaxSize()
         ) {
-            DrawerButton(isSelected = true, buttonDescription = "PlayBack Screen", onClick = navigateToPlayBlackScreen)
-            DrawerButton(isSelected = false, buttonDescription = "PlayList", onClick = navigateToPlayListScreen)
+            DrawerButton(isSelected = Destinations.PLAY_BACK_SCREEN == currentRoute, buttonDescription = "PlayBack Screen", onClick = navigateToPlayBlackScreen)
+            DrawerButton(isSelected = Destinations.PLAY_LIST_SCREEN == currentRoute, buttonDescription = "PlayList", onClick = navigateToPlayListScreen)
         }
     }
 }
@@ -106,5 +109,5 @@ private fun DrawerButton(
 @Preview("App Drawer Content")
 @Composable()
 fun PreviewDrawerConten(){
-    AppDrawerContent()
+    AppDrawerContent(currentRoute = Destinations.PLAY_BACK_SCREEN)
 }

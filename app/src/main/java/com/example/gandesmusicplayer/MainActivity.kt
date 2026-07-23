@@ -52,6 +52,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import coil.compose.AsyncImage
 import com.example.gandesmusicplayer.service.PlayBackService
 import com.example.gandesmusicplayer.ui.theme.GandesMusicPlayerTheme
 import com.google.common.util.concurrent.ListenableFuture
@@ -97,6 +98,7 @@ fun NavGraph(
 ){
     val currentNavBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentNavBackStackEntry?.destination?.route ?: startDestination
+    val playerUiState by playViewModel.uiState.collectAsState()
     NavHost(
         navController = navController,
         startDestination = startDestination,
@@ -109,24 +111,17 @@ fun NavGraph(
                 drawerState = drawerState,
                 navigationActions = navActions,
                 openDrawer = {coroutineScope.launch { drawerState.open() }},
-                closeDrawer = {coroutineScope.launch { drawerState.close() }}
+                closeDrawer = {coroutineScope.launch { drawerState.close() }},
+                currentRoute = currentRoute,
             ) {
                 PlayBackScreen(
                     modifier = Modifier.fillMaxSize(),
-                    onSkipPrevious = {
-
-                    },
-                    onPlayPause = {
-                        playViewModel.controller.value?.let { controller ->
-                            if(controller.isPlaying)
-                                controller.pause()
-                            else
-                                controller.play()
-                        }
-                    },
-                    onSkipNext = {
-
-                    }
+                    isPlaying = playerUiState.isPlaying,
+                    errorMessage = playerUiState.errorMessage,
+                    onSkipPrevious = playViewModel::skipToPrevious,
+                    onPlayPause = playViewModel::playPause,
+                    onSkipNext = playViewModel::skipToNext,
+                    mediaItem = playerUiState.currentMediaItem
                 )
             }
         }
@@ -137,30 +132,34 @@ fun NavGraph(
                 drawerState = drawerState,
                 navigationActions = navActions,
                 openDrawer = {coroutineScope.launch { drawerState.open() }},
-                closeDrawer = {coroutineScope.launch { drawerState.close() }}
-            ) {
+                closeDrawer = {coroutineScope.launch { drawerState.close() }},
+                currentRoute = currentRoute,
+            ) { modifier ->
                 PlayListScreen(
-                    modifier = Modifier.fillMaxSize(),
-                    playList = listOf(
-                        Music(1, "Song 1", "Artist 1", "Album 1", 180000),
-                        Music(2, "Song 2", "Artist 2", "Album 2", 210000),
-                        Music(3, "Song 3", "Artist 3", "Album 3", 240000),
-                    )
+                    modifier = modifier.fillMaxSize(),
+                    playList = playViewModel.providePlayList(),
+                    onMusicClick = { index ->
+                        playViewModel.playFromPlaylist(index)
+                        navActions.navigateToPlayBackScreen()
+                    }
                 )
             }
         }
     }
 }
 
-//Here I decided for "hoisting" mediaController so PlayBackScreen becomes more reusable and testable
+//"hoisting pattern" here, I didn't pass in mediaController so PlayBackScreen becomes more reusable and testable
 //fun PlayBackScreen( modifier: Modifier = Modifier, mediaController: MediaController? = null)
 //fun PlayBackScreen( modifier: Modifier = Modifier, onSkipPrevious: () -> Unit = {}, onPlayPause: () -> Unit = {}, onSkipNext: () -> Unit = {},)
 @Composable
 fun PlayBackScreen(
     modifier: Modifier = Modifier,
+    isPlaying: Boolean = false,
+    errorMessage: String? = null,
     onSkipPrevious: () -> Unit = {},
     onPlayPause: () -> Unit = {},
     onSkipNext: () -> Unit = {},
+    mediaItem: MediaItem? = MediaItem.Builder().setMediaId("empty").build(),
 ){
     Surface(modifier.fillMaxSize()) {
         Column(
@@ -168,11 +167,23 @@ fun PlayBackScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Spacer(modifier.weight(2f))
-            Image(
-                painter = painterResource(R.drawable.ic_launcher_background),
+            AsyncImage(
+                model = mediaItem?.mediaMetadata?.artworkUri,
                 contentDescription = "Origin Album",
                 modifier = modifier.weight(6f).fillMaxWidth(0.8f),
             )
+            Text(
+                text = mediaItem?.mediaMetadata?.title?.toString() ?: "Nenhuma música selecionada",
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                textAlign = TextAlign.Center
+            )
+            if (errorMessage != null) {
+                Text(
+                    text = errorMessage,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    textAlign = TextAlign.Center
+                )
+            }
             Spacer(modifier.weight(2f))
             Row(
                 horizontalArrangement = Arrangement.SpaceAround,
@@ -193,8 +204,10 @@ fun PlayBackScreen(
                     modifier = Modifier.size(60.dp)
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_play_arrow),
-                        contentDescription = "Back Button",
+                        painter = painterResource(
+                            if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow
+                        ),
+                        contentDescription = "Play Pause Button",
                         modifier = Modifier.size(60.dp)
                     )
                 }
@@ -225,34 +238,70 @@ fun PreviewPlayListScreen(){
     PlayListScreen(
         modifier = Modifier.fillMaxSize(),
         playList = listOf(
-            Music(1, "Song 1", "Artist 1", "Album 1", 180000),
-            Music(2, "Song 2", "Artist 2", "Album 2", 210000),
-            Music(3, "Song 3", "Artist 3", "Album 3", 240000),
+            MediaItem.Builder()
+                .setMediaId("preview-1")
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle("Song 1")
+                        .setArtist("Artist 1")
+                        .build()
+                )
+                .build(),
+            MediaItem.Builder()
+                .setMediaId("preview-2")
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle("Song 2")
+                        .setArtist("Artist 2")
+                        .build()
+                )
+                .build(),
+            MediaItem.Builder()
+                .setMediaId("preview-3")
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle("Song 3")
+                        .setArtist("Artist 3")
+                        .build()
+                )
+                .build(),
         )
     )
 }
 
 @Composable
-fun PlayListScreen(modifier: Modifier = Modifier, playList: List<Music> = emptyList()){
-    Surface(modifier.fillMaxSize()) {
+fun PlayListScreen(
+    modifier: Modifier = Modifier,
+    playList: List<MediaItem> = emptyList(),
+    onMusicClick: (Int) -> Unit = {},
+){
+    Surface(modifier) {
         LazyColumn(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
 
         ) {
-            items(playList){ music ->
-                MusicCard(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.10f), music = music,)
+            items(playList){ mediaItem ->
+                MusicCard(
+                    modifier = Modifier.fillMaxWidth().height(84.dp),
+                    mediaItem = mediaItem,
+                    onClick = { onMusicClick(playList.indexOf(mediaItem)) }
+                )
             }
         }
     }
 }
 
 @Composable
-fun MusicCard(modifier: Modifier = Modifier, music: Music) {
+fun MusicCard(modifier: Modifier = Modifier, mediaItem: MediaItem, onClick: () -> Unit = {}) {
+    val metadata = mediaItem.mediaMetadata
+    val title = metadata.title?.toString() ?: mediaItem.mediaId
+    val artist = metadata.artist?.toString() ?: "Artista desconhecido"
+
     Card(
         modifier = modifier,
         shape = RectangleShape,
-        onClick = {},
+        onClick = onClick,
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
     ){
         Row(
@@ -262,8 +311,8 @@ fun MusicCard(modifier: Modifier = Modifier, music: Music) {
                 shape = CircleShape,
                 modifier = Modifier.size(84.dp).padding(4.dp)
             ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_launcher_background),
+                AsyncImage(
+                    model = metadata.artworkUri,
                     contentDescription = "Album Cover",
                     modifier = Modifier.size(64.dp)
                 )
@@ -274,12 +323,12 @@ fun MusicCard(modifier: Modifier = Modifier, music: Music) {
                 modifier = Modifier.fillMaxHeight().weight(1f),
             ) {
                 Text(
-                    text = music.artist,
+                    text = artist,
                     Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = music.name,
+                    text = title,
                     Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -287,14 +336,6 @@ fun MusicCard(modifier: Modifier = Modifier, music: Music) {
         }
     }
 }
-
-data class Music(
-    val id: Int,
-    val name: String,
-    val artist: String,
-    val album: String,
-    val duration: Long,
-)
 
 @Composable
 fun AppTheme(
